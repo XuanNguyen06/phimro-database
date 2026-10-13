@@ -1,75 +1,52 @@
-import pandas as pd
-import numpy as np
-import json
-import re
+"""Script dòng lệnh: làm sạch tệp dữ liệu thô và ghi ra CSV.
 
-# 1. Đọc file resultsRaw_completed.csv
-print("Đang đọc file resultsRaw_completed.csv...")
-df = pd.read_csv('resultsRaw_completed.csv')
+Toàn bộ quy tắc làm sạch nằm trong src/data_pipeline.load_and_clean_data
+(cũng là hàm mà giao diện Streamlit dùng), nên script này chỉ đọc, gọi hàm
+và ghi kết quả. Nhờ vậy chỉ cần sửa quy tắc ở một nơi.
 
-# 2. Đổi tên cột về chuẩn 9 thuộc tính BTL
-rename_dict = {
-    'Release_Year': 'Year',
-    'IMDb_Rating': 'Rating',
-    'Budget_USD': 'Budget',
-    'Revenue_USD': 'Revenue',
-    'Duration_min': 'Duration',
-    'Actors': 'Cast'
-}
-df = df.rename(columns=rename_dict)
+Cách chạy (từ thư mục gốc dự án):
+    python -m src.data_clean                                  # mặc định
+    python -m src.data_clean resultsRaw_completed.csv -o data/results.csv
+"""
 
-# 3. Trích xuất tên thể loại từ chuỗi JSON cột Genre
-def clean_genre(val):
-    if pd.isna(val):
-        return np.nan
+import argparse
+import sys
+from pathlib import Path
+
+# Cho phép chạy trực tiếp "python src/data_clean.py" (không qua -m)
+if __package__ in (None, ""):
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from src.config import DEFAULT_DATA, MISSING_LABEL, RESULTS_FILE  # noqa: E402
+from src.data_pipeline import load_and_clean_data  # noqa: E402
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(description="Làm sạch dữ liệu phim IMDb/TMDB.")
+    parser.add_argument(
+        "input", nargs="?", default=str(DEFAULT_DATA),
+        help=f"Tệp CSV thô (mặc định: {DEFAULT_DATA.name})",
+    )
+    parser.add_argument(
+        "-o", "--output", default=str(RESULTS_FILE),
+        help=f"Tệp CSV kết quả (mặc định: data/{RESULTS_FILE.name})",
+    )
+    args = parser.parse_args(argv)
+
+    print(f"Đang đọc và làm sạch {args.input}...")
     try:
-        s = str(val).strip()
-        if s.startswith('"') and s.endswith('"'):
-            s = s[1:-1]
-        s = s.replace('""', '"')
-        data = json.loads(s)
-        names = [item['name'] for item in data if 'name' in item]
-        return ", ".join(names) if names else np.nan
-    except Exception:
-        names = re.findall(r'"name"\s*:\s*"([^"]+)"', str(val))
-        return ", ".join(names) if names else str(val)
+        df = load_and_clean_data(args.input)
+    except (FileNotFoundError, ValueError) as exc:
+        print(f"Lỗi: {exc}", file=sys.stderr)
+        return 1
 
-if 'Genre' in df.columns:
-    df['Genre'] = df['Genre'].apply(clean_genre)
+    output = Path(args.output)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    # Ô trống ghi thành "N/a" theo quy ước của đề bài
+    df.to_csv(output, index=False, encoding="utf-8-sig", na_rep=MISSING_LABEL)
+    print(f"Đã tạo {output} ({len(df):,} phim, {df.isna().sum().sum():,} ô thiếu).")
+    return 0
 
-# 4. Ép kiểu dữ liệu tiền tệ (Budget, Revenue) về dạng float
-def clean_currency(val):
-    if pd.isna(val) or str(val).strip() in ['', '0', 'N/a', 'nan', 'None']:
-        return np.nan
-    clean_val = str(val).replace('$', '').replace(',', '').strip()
-    try:
-        return float(clean_val)
-    except ValueError:
-        return np.nan
 
-for col in ['Budget', 'Revenue']:
-    if col in df.columns:
-        df[col] = df[col].apply(clean_currency)
-
-# 5. Lọc bỏ các bản ghi trùng lặp (trùng Title và Year)
-if 'Title' in df.columns and 'Year' in df.columns:
-    df = df.drop_duplicates(subset=['Title', 'Year'])
-
-# 6. Sắp xếp danh sách phim theo Title (A-Z) và Year (giảm dần)
-if 'Title' in df.columns and 'Year' in df.columns:
-    df = df.sort_values(by=['Title', 'Year'], ascending=[True, False])
-elif 'Title' in df.columns:
-    df = df.sort_values(by='Title', ascending=True)
-
-# 7. Giữ đúng 9 cột chuẩn
-target_cols = ['Title', 'Year', 'Genre', 'Duration', 'Rating', 'Budget', 'Revenue', 'Director', 'Cast']
-existing_cols = [c for c in target_cols if c in df.columns]
-df = df[existing_cols]
-
-# 8. Thay ô trống thành "N/a"
-df = df.fillna('N/a')
-
-# 9. Xuất file clean
-df.to_csv('results.csv', index=False, encoding='utf-8-sig')
-
-print("Đã tạo file results.csv sạch thành công!")
+if __name__ == "__main__":
+    sys.exit(main())

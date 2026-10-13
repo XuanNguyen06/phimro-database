@@ -5,23 +5,41 @@ import numpy as np
 import pandas as pd
 from sklearn.preprocessing import MinMaxScaler
 
-# Thuộc tính so sánh của biểu đồ radar (README mục 5 - Tổ 3): tên chuẩn ->
-# các tên cột chấp nhận được trong dữ liệu.
-_RADAR_ATTRIBUTES = {
-    "IMDb_Rating": ("IMDb_Rating", "Rating"),
-    "Votes": ("Votes",),
-    "Budget_USD": ("Budget_USD", "Budget"),
-    "Revenue_USD": ("Revenue_USD", "Revenue"),
-    "Duration_min": ("Duration_min", "Duration"),
+from src.config import (
+    BUDGET,
+    COLUMN_ALIASES,
+    DURATION,
+    MONEY_COLUMNS,
+    RADAR_ATTRIBUTES,
+    RATING,
+    REVENUE,
+    TITLE,
+    find_column,
+)
+
+# Đơn vị hiển thị trên trục của histogram (tên chuẩn và tên dài đều dùng được)
+_UNIT_BY_CANONICAL = {
+    BUDGET: "triệu USD",
+    REVENUE: "triệu USD",
+    DURATION: "phút",
+    RATING: "điểm /10",
 }
+_UNITS = {
+    alias: unit
+    for canonical, unit in _UNIT_BY_CANONICAL.items()
+    for alias in COLUMN_ALIASES[canonical]
+}
+_MONEY_COLUMNS = {alias for c in MONEY_COLUMNS for alias in COLUMN_ALIASES[c]}
 
 
-def plot_histogram(df, column):
+def plot_histogram(df, column, log_scale=False):
     """Tạo biểu đồ phân phối của một cột số.
 
     Tham số:
         df (pandas.DataFrame): Dữ liệu phim đã làm sạch.
         column (str): Tên cột số cần trực quan hóa.
+        log_scale (bool): Vẽ trục X theo thang log10 (hữu ích cho tiền tệ
+            bị lệch phải mạnh). Mặc định False.
 
     Trả về khi hoàn thiện:
         matplotlib.figure.Figure: Hình để tầng giao diện dùng st.pyplot.
@@ -34,7 +52,94 @@ def plot_histogram(df, column):
         - Trả về Figure, không gọi plt.show hoặc hàm Streamlit tại đây;
           tầng gọi chịu trách nhiệm đóng hình sau khi sử dụng.
     """
-    pass
+    if not isinstance(df, pd.DataFrame):
+        raise TypeError("df phải là pandas.DataFrame.")
+    if column not in df.columns:
+        raise ValueError(f"Không có cột '{column}' trong dữ liệu.")
+
+    values = (
+        pd.to_numeric(df[column], errors="coerce")
+        .replace([np.inf, -np.inf], np.nan)
+        .dropna()
+    )
+    if log_scale:
+        values = values[values > 0]
+    if values.empty:
+        raise ValueError(f"Cột '{column}' không có giá trị số hợp lệ để vẽ.")
+
+    is_money = column in _MONEY_COLUMNS
+    unit = _UNITS.get(column, "")
+    # Tiền tệ hiển thị theo triệu USD cho dễ đọc
+    plot_values = values / 1e6 if is_money else values
+
+    if log_scale:
+        data = np.log10(plot_values)
+        x_label = f"log10({column}{' - ' + unit if unit else ''})"
+    else:
+        data = plot_values
+        x_label = f"{column} ({unit})" if unit else column
+
+    # Số khoảng chia tự động (Freedman–Diaconis/Sturges), giới hạn 10..50
+    edges = np.histogram_bin_edges(data, bins="auto")
+    bins = int(np.clip(len(edges) - 1, 10, 50))
+
+    fig, ax = plt.subplots(figsize=(8, 4.5))
+    ax.hist(data, bins=bins, color="#4C72B0", edgecolor="white", alpha=0.85)
+
+    mean, median = data.mean(), data.median()
+    ax.axvline(mean, color="#DD8452", linestyle="--", linewidth=2, label=f"Mean = {mean:,.2f}")
+    ax.axvline(median, color="#55A868", linestyle="-", linewidth=2, label=f"Median = {median:,.2f}")
+
+    ax.set_title(f"Phân phối {column} (n = {len(values):,})")
+    ax.set_xlabel(x_label)
+    ax.set_ylabel("Số lượng phim")
+    ax.grid(axis="y", alpha=0.3)
+    ax.legend()
+    fig.tight_layout()
+    return fig
+
+
+def plot_pca_clusters(df_pca, labels, titles=None, names=None):
+    """Vẽ biểu đồ phân tán 2D các phim theo tọa độ PCA, tô màu theo cụm.
+
+    Tham số:
+        df_pca (pandas.DataFrame): Kết quả run_pca_reduction (2 cột tọa độ).
+        labels (pandas.Series): Nhãn cụm, cùng chỉ mục với df_pca.
+        titles (pandas.Series, tùy chọn): Không dùng để vẽ, giữ cho mở rộng.
+        names (dict, tùy chọn): Nhãn cụm -> tên hiển thị trong chú giải
+            (kết quả models.name_clusters).
+
+    Trả về:
+        matplotlib.figure.Figure
+    """
+    x_col, y_col = df_pca.columns[:2]
+    labels = labels.reindex(df_pca.index)
+    ratio = df_pca.attrs.get("explained_variance_ratio")
+    names = names or {}
+
+    fig, ax = plt.subplots(figsize=(8, 6))
+    cmap = plt.get_cmap("tab10")
+    for i, cluster in enumerate(sorted(labels.dropna().unique())):
+        mask = labels == cluster
+        name = names.get(int(cluster))
+        label = f"Cụm {int(cluster)}" + (f": {name}" if name else "") + f" ({mask.sum()})"
+        ax.scatter(
+            df_pca.loc[mask, x_col], df_pca.loc[mask, y_col],
+            s=25, alpha=0.7, color=cmap(i % 10), label=label,
+        )
+
+    if ratio is not None and len(ratio) >= 2:
+        ax.set_xlabel(f"{x_col} – giải thích {ratio[0]:.1%} phương sai")
+        ax.set_ylabel(f"{y_col} – giải thích {ratio[1]:.1%} phương sai")
+    else:
+        ax.set_xlabel(x_col)
+        ax.set_ylabel(y_col)
+    ax.set_title("Bản đồ phân cụm phim (K-Means + PCA 2D)")
+    ax.grid(alpha=0.3)
+    ax.legend(title="Nhãn cụm")
+    fig.tight_layout()
+    return fig
+
 
 
 def plot_radar_chart(df, movie1_name, movie2_name):
@@ -62,10 +167,10 @@ def plot_radar_chart(df, movie1_name, movie2_name):
     Ghi chú cài đặt (Tổ 3):
         - Cột tên phim là Title; so khớp chính xác (đã bỏ khoảng trắng thừa).
           Ném ValueError nếu không tìm thấy hoặc trùng nhiều bản ghi.
-        - Thuộc tính: IMDb_Rating, Votes, Budget_USD, Revenue_USD,
-          Duration_min (chấp nhận tên rút gọn Rating, Budget, Revenue,
-          Duration). Thuộc tính thiếu cột hoặc thiếu giá trị ở một trong hai
-          phim bị bỏ qua; cần còn ít nhất 3 thuộc tính.
+        - Thuộc tính: Rating, Votes, Budget, Revenue, Duration (RADAR_ATTRIBUTES
+          trong src/config.py, chấp nhận tên dài IMDb_Rating, Budget_USD,
+          Revenue_USD, Duration_min). Thuộc tính thiếu cột hoặc thiếu giá trị
+          ở một trong hai phim bị bỏ qua; cần còn ít nhất 3 thuộc tính.
         - MinMaxScaler được học trên toàn bộ df (tập tham chiếu), không chỉ
           hai phim; thuộc tính hằng số được đặt ở mức 0.5.
         - Các giá trị trên biểu đồ đã chuẩn hóa về [0, 1], không phải giá trị
@@ -73,11 +178,11 @@ def plot_radar_chart(df, movie1_name, movie2_name):
     """
     if not isinstance(df, pd.DataFrame):
         raise TypeError("df phải là pandas.DataFrame.")
-    if "Title" not in df.columns:
-        raise ValueError("Thiếu cột 'Title' để tìm tên phim.")
+    if TITLE not in df.columns:
+        raise ValueError(f"Thiếu cột '{TITLE}' để tìm tên phim.")
 
     # 1. Lọc dòng dữ liệu của từng phim (đúng thứ tự phim 1, phim 2)
-    titles = df["Title"].astype(str).str.strip()
+    titles = df[TITLE].astype(str).str.strip()
     rows = []
     for name in (movie1_name, movie2_name):
         matched = df[titles == str(name).strip()]
@@ -92,8 +197,8 @@ def plot_radar_chart(df, movie1_name, movie2_name):
 
     # 2. Chọn thuộc tính so sánh (cột số hợp lệ, tập tham chiếu = toàn bộ df)
     reference = {}
-    for canonical, candidates in _RADAR_ATTRIBUTES.items():
-        found = next((c for c in candidates if c in df.columns), None)
+    for canonical in RADAR_ATTRIBUTES:
+        found = find_column(df, canonical)
         if found is not None:
             reference[canonical] = (
                 pd.to_numeric(df[found], errors="coerce")

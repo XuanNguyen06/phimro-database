@@ -1,385 +1,177 @@
-# 🎬 Movie Data Analysis & Prediction Web App (IMDb/TMDB)
+# 🎬 Movie Intelligence: Phân Tích Dữ Liệu Điện Ảnh & Dự Đoán Doanh Thu Phòng Vé (IMDb/TMDB)
 
-Tài liệu hướng dẫn thi công dự án dành cho các tổ thành viên.
-Đọc kỹ mục **Quy ước chung** trước khi bắt tay vào code.
+Ứng dụng web trực quan hóa dữ liệu và dự báo doanh thu phòng vé được xây dựng trên nền tảng **Python**, **Streamlit** và **Scikit-Learn**. 
+
+Hệ thống kết hợp kỹ thuật **Khai phá dữ liệu (Data Mining)**, **Thống kê mô tả (EDA)** và các thuật toán **Học máy (Machine Learning)** nhằm cung cấp góc nhìn toàn diện về thị trường điện ảnh thế giới.
 
 ---
 
-## 1. Cấu trúc dự án
+## 📌 1. Mục đích và Ý tưởng của Dự án
+
+Trong ngành công nghiệp điện ảnh toàn cầu, việc sản xuất một bộ phim đòi hỏi nguồn vốn đầu tư khổng lồ (hàng chục đến hàng trăm triệu USD). Tuy nhiên, mức độ thành công tại phòng vé cũng như phản ứng của khán giả và giới phê bình phụ thuộc vào sự đan xen phức tạp giữa nhiều yếu tố: **kinh phí sản xuất (Budget)**, **thể loại (Genre)**, **thời lượng (Duration)**, **sức hút diễn viên/đạo diễn (Cast/Director)** và **chất lượng nội dung (Rating & Votes)**.
+
+🎯 **Mục tiêu cốt lõi của Web App:**
+1. **Dân chủ hóa và trực quan hóa dữ liệu điện ảnh:** Chuyển đổi các tập dữ liệu thô, phức tạp từ IMDb và TMDB thành các biểu đồ trực quan, bảng biểu phân tích tương tác dễ hiểu cho người xem.
+2. **Khám phá quy luật thị trường (Exploratory Data Analysis):** Giúp người xem nắm bắt xu hướng doanh thu, kinh phí, điểm đánh giá theo từng thể loại và thời kỳ phát hành.
+3. **Phân khúc thị trường phim (Clustering & Dimensionality Reduction):** Nhóm các bộ phim có đặc tính tương đồng (bom tấn sinh lời lớn, phim nghệ thuật kinh phí thấp điểm cao, phim thua lỗ...) thông qua mô hình phân cụm K-Means và bản đồ tọa độ PCA 2 chiều.
+4. **Đối đầu và so sánh tác phẩm (Radar Comparative Analysis):** Cung cấp công cụ so sánh đa chiều giữa hai tác phẩm điện ảnh bất kỳ để nhận diện điểm mạnh, điểm yếu trên cùng một hệ quy chiếu.
+5. **Dự báo tiềm năng thương mại (Revenue Prediction):** Ứng dụng mô hình học máy hồi quy (Regression) để dự đoán doanh thu phòng vé dựa trên các tham số đầu vào được thiết lập trước khi phát hành, hỗ trợ việc đánh giá tiềm năng thị trường.
+
+👥 **Đối tượng phục vụ:**
+- **Khán giả và người yêu điện ảnh:** Tra cứu thông tin, khám phá xu hướng các dòng phim yêu thích và so sánh các tác phẩm kinh điển.
+- **Nhà nghiên cứu / Giới phê bình:** Khai thác dữ liệu thống kê, quan sát tương quan giữa đánh giá chuyên môn và sức tiêu thụ vé.
+- **Nhà đầu tư / Nhà sản xuất phim:** Tham khảo dữ liệu lịch sử để đánh giá tương quan giữa kinh phí đầu tư và tiềm năng doanh thu phòng vé.
+
+---
+
+## 🌟 2. Các Phân Hệ & Tính Năng Chính Của Web App
+
+Giao diện ứng dụng được tổ chức khoa học thành **4 phân hệ chính** trên thanh điều hướng Streamlit:
+
+```
+                            🌐 GIAO DIỆN WEB STREAMLIT
+                                        │
+    ┌───────────────────┬───────────────┴───────────────┬───────────────────┐
+    ▼                   ▼                               ▼                   ▼
+[Phần I: Pipeline]  [Phần II: Thống kê & EDA]    [Phần III: Phân cụm]   [Phần IV: Dự đoán]
+- Làm sạch dữ liệu  - Thống kê All & Theo Thể loại- Phân cụm K-Means    - Mô hình Hồi quy
+- Xử lý thiếu/trùng - Top/Bottom phim             - Bản đồ PCA 2D       - Nhập thông số phim
+- Chuẩn hóa 9 cột   - Phân bố Histogram           - Biểu đồ Radar       - Dự báo doanh thu
+```
+
+---
+
+### 🔹 Phần I: Tổng quan & Tiền xử lý Dữ liệu (Overview & Data Pipeline)
+*Module nền tảng đảm bảo chất lượng và độ tin cậy của toàn bộ luồng phân tích.*
+- **Tải và khám phá dữ liệu:** Xem trước bảng dữ liệu phim thô thu thập từ IMDb/TMDB (`resultsRaw_completed.csv` / `results.csv`).
+- **Chuẩn hóa 9 thuộc tính tiêu chuẩn:** `Title` (Tên phim), `Year` (Năm phát hành), `Genre` (Thể loại), `Duration` (Thời lượng), `Rating` (Điểm IMDb), `Budget` (Kinh phí), `Revenue` (Doanh thu), `Director` (Đạo diễn), `Cast` (Dàn diễn viên).
+- **Làm sạch sâu:** Xử lý chuỗi JSON thể loại, chuẩn hóa ký hiệu tiền tệ (`$`, dấu phẩy), khử giá trị khuyết thiếu (`NaN`, `N/a`) và loại bỏ bản ghi trùng lặp (`drop_duplicates`).
+
+### 🔹 Phần II: Thống kê Mô tả & Phân tích Thị trường (Statistics & Distribution)
+*Cung cấp bức tranh toàn cảnh về hiệu quả tài chính và chất lượng nghệ thuật.*
+- **Chỉ số thống kê đa chiều:** Tự động tính toán các đại lượng **Mean (Trung bình)**, **Median (Trung vị)**, **Std (Độ lệch chuẩn)** của Doanh thu, Kinh phí và Điểm đánh giá cho toàn bộ tập dữ liệu (`All`) cũng như phân nhóm theo từng thể loại (`Genre`).
+- **Bảng xếp hạng Top & Bottom:** Tìm kiếm nhanh top các bộ phim có điểm số cao nhất/thấp nhất hoặc doanh thu ấn tượng nhất để phân tích yếu tố thành công hay thất bại.
+- **Trực quan hóa phân phối (Histogram):** Vẽ biểu đồ tần suất phân bố của điểm đánh giá, ngân sách và doanh thu để người xem nhận diện độ lệch (skewness) của thị trường.
+
+### 🔹 Phần III: Phân cụm Thị trường & So sánh Đa Chiều (Clustering & Radar Comparison)
+*Khai phá cấu trúc tiềm ẩn và công cụ so sánh trực quan sâu sắc.*
+- **Phân cụm K-Means:** Tự động chuẩn hóa dữ liệu với `StandardScaler` và gom nhóm các tác phẩm điện ảnh vào các phân khúc đặc trưng (ví dụ: Bom tấn đại chúng, Phim kinh phí trung bình sinh lời, Phim độc lập nghệ thuật).
+- **Chiếu bản đồ 2D (PCA):** Sử dụng thuật toán Giảm chiều dữ liệu PCA (Principal Component Analysis) để biểu diễn các cụm phim trên mặt phẳng 2D, giúp người dùng dễ dàng quan sát mật độ và ranh giới giữa các nhóm phim.
+- **Biểu đồ Radar (Spider Chart):** Công cụ so sánh đối đầu giữa hai bộ phim bất kỳ dựa trên các thang đo đã được chuẩn hóa `MinMaxScaler` (Rating, Budget, Revenue, Duration, Votes), làm nổi bật thế mạnh tương đối của từng tác phẩm.
+
+### 🔹 Phần IV: Mô hình Dự đoán Doanh thu Phòng vé (Box Office Revenue Prediction)
+*Ứng dụng trí tuệ nhân tạo để lượng hóa tiềm năng thương mại.*
+- **Huấn luyện mô hình Machine Learning:** Tích hợp `LinearRegression` hoặc `RandomForestRegressor` được đóng gói trong quy trình chuẩn `Pipeline` và `ColumnTransformer` của Scikit-Learn.
+- **Đánh giá khách quan:** Tách bạch tập kiểm tra độc lập (`train_test_split`), báo cáo đầy đủ các chỉ số đo lường sai số: **MAE** (Sai số tuyệt đối trung bình), **RMSE** (Căn bậc hai sai số toàn phương trung bình) và hệ số xác định **$R^2$ Score**.
+- **Mô phỏng doanh thu tương tác:** Cho phép người dùng nhập các thông số dự kiến của một dự án phim mới (kinh phí dự kiến, thể loại, thời lượng, điểm đánh giá kỳ vọng...) để mô hình ước tính doanh thu phòng vé tiềm năng ngay trên trình duyệt.
+
+---
+
+## 🛠️ 3. Công Nghệ & Thư Viện Sử Dụng
+
+| Hạng mục | Công nghệ / Thư viện | Mục đích sử dụng |
+|---|---|---|
+| **Giao diện Web** | Streamlit | Xây dựng Dashboard web tương tác trực quan, thời gian thực |
+| **Xử lý dữ liệu** | Pandas, NumPy | Đọc, lọc, chuyển đổi kiểu, biến đổi ma trận và làm sạch dữ liệu |
+| **Học máy & Khai phá** | Scikit-Learn | K-Means, PCA, StandardScaler, MinMaxScaler, LinearRegression / RandomForest |
+| **Trực quan hóa đồ họa** | Matplotlib, Seaborn | Vẽ biểu đồ Histogram phân phối, bản đồ cụm 2D và biểu đồ Radar cực đa giác |
+| **Thu thập dữ liệu** | BeautifulSoup4, Requests | Hỗ trợ cào dữ liệu phim từ các nguồn mở (IMDb/TMDB) |
+
+---
+
+## 📂 4. Cấu Trúc Thư Mục Dự Án
 
 ```text
-phimro-database/
+BTL Python/
 ├── data/
-│   ├── results.csv          # Dữ liệu đầu vào (Tổ 1 / mock data)
-│   └── results2.csv         # Bảng thống kê xuất ra (Tổ 2)
+│   ├── phim.csv                 # Tập dữ liệu phim đã làm sạch chuẩn bị sẵn
+│   ├── results.csv              # Dữ liệu bảng phim chuẩn dùng cho phân tích
+│   └── results2.csv             # Kết quả thống kê mô tả xuất ra từ Phần II
 ├── src/
-│   ├── data_pipeline.py     # Phần I  - Làm sạch dữ liệu
-│   ├── statistics_eda.py    # Phần II - Thống kê mô tả
-│   ├── models.py            # Phần III & IV - Học máy
-│   └── visualizer.py        # Phần II & III - Biểu đồ
-├── app.py                   # Giao diện Streamlit (Nhóm trưởng phụ trách)
-├── requirements.txt         # Danh sách thư viện
-└── README.md                # Tài liệu này
+│   ├── data_clean.py            # Script tiền xử lý từ dữ liệu thô sang dữ liệu chuẩn
+│   ├── data_pipeline.py         # Module Phần I: Chuẩn hóa & kiểm tra dữ liệu đầu vào
+│   ├── statistics_eda.py        # Module Phần II: Thống kê Mean/Median/Std & Top phim
+│   ├── models.py                # Module Phần III & IV: K-Means, PCA & Mô hình Hồi quy
+│   └── visualizer.py            # Module Phần II & III: Đồ họa Histogram & Radar Chart
+├── app.py                       # Điểm khởi chạy ứng dụng web Streamlit
+├── requirements.txt             # Danh sách gói thư viện Python cần thiết
+└── README.md                    # Tài liệu giới thiệu & hướng dẫn dự án
 ```
 
 ---
 
-## 2. Cài đặt và chạy dự án
+## 🚀 5. Hướng Dẫn Cài Đặt & Khởi Chạy
 
-Yêu cầu: Python 3.10 trở lên.
+### Yêu cầu tiên quyết:
+- Đã cài đặt **Python 3.10** trở lên trên hệ điều hành (Windows / macOS / Linux).
 
-```powershell
-Set-Location "d:\PRJ\phimro-database"
-python -m venv .venv
-.venv\Scripts\Activate.ps1
-python -m pip install -r requirements.txt
-python -m streamlit run app.py
-```
+### Các bước thực hiện:
 
-Mở trình duyệt tại `http://localhost:8501` để xem giao diện.
+1. **Mở terminal/Powershell tại thư mục dự án:**
+   ```powershell
+   cd "c:\BTL Python\BTL Python"
+   ```
 
-> ⚠️ Nếu gặp lỗi phiên bản scikit-learn khi chạy,
-> hãy chạy lại `python -m pip install -r requirements.txt`.
+2. **Khởi tạo môi trường ảo (khuyến nghị):**
+   ```powershell
+   python -m venv .venv
+   .venv\Scripts\Activate.ps1
+   ```
+   *(Trên Linux/macOS: `source .venv/bin/activate`)*
+
+3. **Cài đặt các thư viện cần thiết:**
+   ```powershell
+   python -m pip install --upgrade pip
+   python -m pip install -r requirements.txt
+   ```
+
+4. **Khởi chạy ứng dụng Web:**
+   ```powershell
+   python -m streamlit run app.py
+   ```
+
+5. **Truy cập ứng dụng:**
+   - Mở trình duyệt web và truy cập địa chỉ: `http://localhost:8501`
+   - Sử dụng thanh menu bên trái (Sidebar) để chuyển đổi qua lại giữa 4 phân hệ tính năng.
 
 ---
 
-## 3. Quy ước chung TRƯỚC KHI CODE
+## 📊 6. Cấu Trúc Bảng Dữ Liệu Chuẩn
 
-### 3.1. Dữ liệu đầu vào (Mock Data)
+Hệ thống sử dụng bảng dữ liệu phim với các trường thông tin chuẩn hóa:
 
-Trong lúc chờ **Tổ 1** thu thập dữ liệu thật, mỗi thành viên tự tạo
-file `data/results.csv` giả lập (hoặc lấy bản chung của tổ) với các cột
-chuẩn sau:
-
-| Cột | Kiểu dữ liệu | Ví dụ | Ghi chú |
+| Tên cột | Kiểu dữ liệu | Mô tả | Ý nghĩa phân tích |
 |---|---|---|---|
-| `Title` | str | `Inception` | Tên phim, dùng làm khóa tìm kiếm |
-| `Genre` | str | `Sci-Fi` | Dùng cho groupby ở Phần II |
-| `IMDb_Rating` | float | `8.8` | Thang 0–10 |
-| `Budget_USD` | int | `160000000` | Đơn vị: USD |
-| `Revenue_USD` | int | `836800000` | Đơn vị: USD |
-| `Votes` | int | `2300000` | Bắt buộc cho biểu đồ radar (Phần III) |
-| `Duration_min` | int | `148` | Bắt buộc cho biểu đồ radar (Phần III) |
-
-Gợi ý tạo nhanh dữ liệu giả lập (chạy 1 lần tại thư mục gốc dự án):
-
-```python
-import numpy as np
-import pandas as pd
-
-rng = np.random.default_rng(42)
-genres = ["Action", "Comedy", "Drama", "Sci-Fi", "Horror", "Animation"]
-rows = []
-for i in range(60):
-    budget = int(rng.integers(1_000_000, 250_000_000))
-    rows.append({
-        "Title": f"Mock Movie {i + 1}",
-        "Genre": rng.choice(genres),
-        "IMDb_Rating": round(float(rng.uniform(2.0, 9.5)), 1),
-        "Budget_USD": budget,
-        "Revenue_USD": int(budget * rng.uniform(0.2, 6.0)),
-        "Votes": int(rng.integers(1_000, 2_000_000)),
-        "Duration_min": int(rng.integers(80, 190)),
-    })
-
-pd.DataFrame(rows).to_csv("data/results.csv", index=False)
-```
-
-### 3.2. Nguyên tắc code
-
-1. **Viết code trực tiếp vào các hàm đã được Nhóm trưởng định nghĩa sẵn**
-   trong thư mục `src/`. Thay chữ `pass` bằng phần cài đặt của mình.
-2. **Tuyệt đối không thay đổi tên hàm** hay tham số đầu vào/đầu ra.
-   Nếu cần tham số mới, phải có giá trị mặc định và báo Nhóm trưởng
-   trước.
-3. **Không sửa `app.py`** — Nhóm trưởng là người duy nhất import hàm
-   vào giao diện và thiết kế nút bấm.
-4. Giữ nguyên **docstring tiếng Việt**; bổ sung ghi chú của mình vào
-   cuối docstring nếu cần.
-5. Thư viện sử dụng chính: `pandas` (xử lý bảng),
-   `matplotlib.pyplot` (vẽ hình), `sklearn` (học máy).
-6. Chạy mọi lệnh test **từ thư mục gốc dự án** để đường dẫn tương đối
-   `data/results.csv`, `data/results2.csv` hoạt động đúng.
-7. Không commit dữ liệu lớn; file `*.csv` trong `data/` chỉ dùng nội bộ.
+| `Title` | String | Tên chính thức của bộ phim | Khóa định danh để tra cứu, hiển thị và so sánh |
+| `Year` | Integer | Năm công chiếu | Phân tích xu hướng phim theo thời gian |
+| `Genre` | String | Danh sách thể loại (Action, Drama, ...) | Phân nhóm, thống kê thị hiếu theo dòng phim |
+| `Duration` | Integer | Thời lượng phim (phút) | Đánh giá độ dài tác phẩm tác động đến người xem |
+| `Rating` | Float | Điểm số đánh giá trên thang 10 | Đo lường chất lượng và phản hồi từ khán giả |
+| `Budget` | Float / Int | Kinh phí sản xuất (USD) | Đầu vào tài chính, chi phí đầu tư ban đầu |
+| `Revenue` | Float / Int | Doanh thu phòng vé toàn cầu (USD) | Thước đo thành công thương mại, biến mục tiêu dự đoán |
+| `Director` | String | Đạo diễn bộ phim | Phân tích phong cách nghệ thuật và bảo chứng phòng vé |
+| `Cast` | String | Các diễn viên chính tham gia | Yếu tố ngôi sao thu hút khán giả đến rạp |
 
 ---
 
-## 4. Bảng hợp đồng hàm (Contract) — tra cứu nhanh
+## ⚙️ 7. Hợp Đồng Mô-Đun Kỹ Thuật (API Specifications)
 
-| Hàm | File | Trả về |
-|---|---|---|
-| `load_and_clean_data(raw_file_path)` | `src/data_pipeline.py` | `DataFrame` đã làm sạch |
-| `calculate_basic_stats(df)` | `src/statistics_eda.py` | `DataFrame` thống kê + xuất `data/results2.csv` |
-| `get_top_bottom_movies(df, column, top_n=3)` | `src/statistics_eda.py` | `(top_movies, bottom_movies)` |
-| `plot_histogram(df, column)` | `src/visualizer.py` | `matplotlib.figure.Figure` |
-| `run_kmeans_clustering(df, n_clusters)` | `src/models.py` | `DataFrame` có cột `Cluster` |
-| `run_pca_reduction(df)` | `src/models.py` | `DataFrame` tọa độ PCA 2 cột |
-| `train_revenue_prediction_model(df)` | `src/models.py` | `Pipeline` sklearn đã huấn luyện |
-| `plot_radar_chart(df, movie1_name, movie2_name)` | `src/visualizer.py` | `matplotlib.figure.Figure` |
+Hệ thống được thiết kế theo nguyên lý tách biệt giao diện và tầng logic (Modular Architecture):
 
-**Quy tắc chung khi trả về hình:** trả về đối tượng `fig`, **không**
-gọi `plt.show()`; bên `app.py` sẽ dùng `st.pyplot(fig)` và đóng hình.
+- `load_and_clean_data(raw_file_path)`: Đọc và trả về DataFrame đã làm sạch kiểu dữ liệu, loại bỏ giá trị khuyết thiếu và trùng lặp.
+- `calculate_basic_stats(df)`: Tổng hợp các chỉ số Mean, Median, Std cho toàn bộ bảng và theo nhóm thể loại; xuất dữ liệu ra `data/results2.csv`.
+- `get_top_bottom_movies(df, column, top_n=3)`: Trả về cặp `(top_movies, bottom_movies)` theo thuộc tính lựa chọn.
+- `plot_histogram(df, column)`: Sinh đối tượng `Figure` biểu đồ phân phối tần suất của một thuộc tính số.
+- `run_kmeans_clustering(df, n_clusters)`: Chuẩn hóa đặc trưng và phân cụm K-Means, bổ sung nhãn `Cluster` vào dữ liệu.
+- `run_pca_reduction(df)`: Giảm không gian dữ liệu đa chiều về 2 chiều (PC1, PC2) để trực quan hóa cụm phim.
+- `plot_radar_chart(df, movie1_name, movie2_name)`: Trực quan hóa so sánh đa chiều giữa hai bộ phim trên đồ thị tọa độ cực (Polar/Radar Chart).
+- `train_revenue_prediction_model(df)`: Đào tạo và đánh giá mô hình Scikit-Learn Pipeline dự đoán doanh thu phòng vé.
 
 ---
 
-## 5. Phân công chi tiết theo tổ
-
-### 📌 TỔ 1 — Phần I: Thu thập & làm sạch dữ liệu
-
-**File:** `src/data_pipeline.py`
-
-- Thu thập dữ liệu thật (web scraping bằng `requests` +
-  `beautifulsoup4` hoặc tải dataset mở) và thay file mock
-  `data/results.csv`.
-- Cài đặt `load_and_clean_data(raw_file_path)`:
-  - Đọc CSV; chuyển `"N/a"`, chuỗi rỗng thành giá trị thiếu (`NaN`).
-  - Loại khoảng trắng thừa, bỏ dòng trùng lặp theo `Title`.
-  - Ép kiểu số cho `IMDb_Rating`, `Budget_USD`, `Revenue_USD`,
-    `Votes`, `Duration_min`.
-  - Trả về `DataFrame` sạch; lỗi tệp hoặc thiếu cột phải báo rõ.
-
-**Nghiệm thu:** chạy
-`python -c "from src.data_pipeline import load_and_clean_data; print(load_and_clean_data('data/results.csv').info())"`
-không báo lỗi.
-
----
-
-### 📌 TỔ 2 — Phần II: Thống kê & Trực quan hóa
-
-**File chính:** `src/statistics_eda.py` và `src/visualizer.py`
-
-#### Nhiệm vụ 1 — Tính thống kê và xuất `results2.csv`
-
-Hàm: `calculate_basic_stats(df)`
-
-- Tính **Median, Mean, Std** cho `IMDb_Rating`, `Revenue_USD`,
-  `Budget_USD` trên **toàn bộ dữ liệu** (hàng `All`)
-  và **nhóm theo `Genre`**.
-- Xuất file: `df_results.to_csv("data/results2.csv", index=True)`
-  (chạy từ thư mục gốc dự án).
-- Trả về `df_results` để hiển thị lên web.
-
-Gợi ý thuật toán:
-
-```python
-import pandas as pd
-
-def calculate_basic_stats(df):
-    cols = ["IMDb_Rating", "Revenue_USD", "Budget_USD"]
-
-    # 1. Thống kê TOÀN BỘ dữ liệu (All)
-    all_stats = df[cols].agg(["mean", "median", "std"]).T
-    all_stats.index = pd.MultiIndex.from_product(
-        [["All"], all_stats.index]
-    )
-
-    # 2. Thống kê theo TỪNG THỂ LOẠI (Groupby Genre)
-    genre_stats = df.groupby("Genre")[cols].agg(["mean", "median", "std"])
-    # ... sinh viên ghép 2 bảng trên thành df_results thống nhất ...
-
-    # df_results.to_csv("data/results2.csv", index=True)
-    return df_results  # Trả về bảng để hiển thị lên Web
-```
-
-#### Nhiệm vụ 2 — Top phim điểm cao nhất / thấp nhất
-
-Hàm: `get_top_bottom_movies(df, column, top_n=3)`
-
-```python
-def get_top_bottom_movies(df, column, top_n=3):
-    top_movies = df.nlargest(top_n, column)[["Title", column]]
-    bottom_movies = df.nsmallest(top_n, column)[["Title", column]]
-    return top_movies, bottom_movies
-```
-
-#### Nhiệm vụ 3 — Biểu đồ phân bố (Histogram)
-
-Hàm: `plot_histogram(df, column)` trong `src/visualizer.py`
-
-```python
-import matplotlib.pyplot as plt
-
-def plot_histogram(df, column):
-    fig, ax = plt.subplots(figsize=(8, 5))
-    ax.hist(df[column].dropna(), bins=20,
-            color="skyblue", edgecolor="black")
-    ax.set_title(f"Phân bố của {column}")
-    ax.set_xlabel(column)
-    ax.set_ylabel("Số lượng phim")
-    return fig  # Trả về fig để Streamlit hiển thị (st.pyplot(fig))
-```
-
----
-
-### 📌 TỔ 3 — Phần III: Học máy & Biểu đồ nâng cao
-
-**File chính:** `src/models.py` và `src/visualizer.py`
-
-#### Nhiệm vụ 1 — Phân cụm K-means
-
-Hàm: `run_kmeans_clustering(df, n_clusters)`
-
-Gom nhóm phim (bom tấn, phim xịt...) dựa trên `Budget_USD`,
-`Revenue_USD`, `IMDb_Rating`.
-
-```python
-from sklearn.cluster import KMeans
-from sklearn.preprocessing import StandardScaler
-
-def run_kmeans_clustering(df, n_clusters):
-    features = ["Budget_USD", "Revenue_USD", "IMDb_Rating"]
-    X = df[features].dropna().copy()
-
-    # RẤT QUAN TRỌNG: đưa tiền và điểm số về cùng thang đo
-    scaler = StandardScaler()
-    X_scaled = scaler.fit_transform(X)
-
-    kmeans = KMeans(n_clusters=n_clusters, random_state=42, n_init=10)
-    X["Cluster"] = kmeans.fit_predict(X_scaled)
-
-    return X  # Bảng dữ liệu đã có cột 'Cluster' (nhãn 0, 1, 2...)
-```
-
-> 📝 **Ghi chú cho báo cáo:** chạy vòng lặp `n_clusters` từ 1–10, vẽ
-> **Elbow Method** (biểu đồ inertia) để biện luận vì sao chọn K = 3
-> hoặc K = 4.
-
-#### Nhiệm vụ 2 — Giảm chiều PCA (bản đồ cụm 2D)
-
-Hàm: `run_pca_reduction(df)`
-
-> ⚠️ **Lưu ý chữ ký:** Hướng dẫn gốc gợi ý nhận `X_scaled` (mảng đã
-> chuẩn hóa). Để thống nhất đầu vào `df` như hợp đồng hàm, **hàm tự
-> chuẩn hóa ở bên trong** (dùng `StandardScaler` trước khi chạy PCA).
-> Sinh viên nhận `df` rồi tự chọn cột số, drop dòng thiếu, scale, PCA.
-
-```python
-from sklearn.decomposition import PCA
-from sklearn.preprocessing import StandardScaler
-
-def run_pca_reduction(df):
-    features = ["Budget_USD", "Revenue_USD", "IMDb_Rating"]
-    X = df[features].dropna()
-
-    X_scaled = StandardScaler().fit_transform(X)
-    pca = PCA(n_components=2)
-    principal_components = pca.fit_transform(X_scaled)
-
-    df_pca = pd.DataFrame(
-        data=principal_components,
-        columns=["Trục X (PCA 1)", "Trục Y (PCA 2)"],
-        index=X.index,  # GIỮ chỉ mục để ghép tên phim / nhãn cụm
-    )
-    return df_pca
-```
-
-#### Nhiệm vụ 3 — Biểu đồ Radar (so sánh 2 bộ phim)
-
-Hàm: `plot_radar_chart(df, movie1_name, movie2_name)` trong
-`src/visualizer.py`
-
-```python
-import numpy as np
-import matplotlib.pyplot as plt
-from sklearn.preprocessing import MinMaxScaler
-
-def plot_radar_chart(df, movie1_name, movie2_name):
-    # 1. Lọc 2 dòng dữ liệu của 2 phim
-    movies_data = df[df["Title"].isin([movie1_name, movie2_name])]
-
-    # 2. Chọn thuộc tính so sánh
-    attributes = ["IMDb_Rating", "Votes",
-                   "Budget_USD", "Revenue_USD", "Duration_min"]
-
-    # 3. Min-Max Scaling về [0, 1] để 5 thuộc tính cùng thang
-    scaler = MinMaxScaler()
-    movies_scaled = scaler.fit_transform(movies_data[attributes])
-
-    # 4. Góc các đỉnh radar + đóng vòng tròn
-    angles = np.linspace(0, 2 * np.pi,
-                         len(attributes), endpoint=False).tolist()
-    angles += angles[:1]
-
-    # 5. Vẽ
-    fig, ax = plt.subplots(figsize=(6, 6), subplot_kw={"polar": True})
-    for i, row in enumerate(movies_scaled):
-        values = row.tolist()
-        values += values[:1]
-        ax.plot(angles, values, linewidth=2,
-                label=movies_data.iloc[i]["Title"])
-        ax.fill(angles, values, alpha=0.25)
-
-    ax.set_yticklabels([])
-    ax.set_xticks(angles[:-1])
-    ax.set_xticklabels(attributes)
-    ax.legend(loc="upper right", bbox_to_anchor=(1.3, 1.1))
-    return fig
-```
-
-> ⚠️ Hàm này **bắt buộc** file CSV phải có cột `Votes` và
-> `Duration_min` (xem mục 3.1).
-
----
-
-### 📌 PHẦN IV — Dự đoán doanh thu (Linear Regression / Random Forest)
-
-**File:** `src/models.py`
-
-Hàm: `train_revenue_prediction_model(df)`
-
-1. Mục tiêu dự đoán: `Revenue_USD`; đặc trưng gợi ý: `Budget_USD`,
-   `IMDb_Rating`, `Votes`, `Duration_min` (không dùng `Title`/`Genre`
-   thô nếu chưa mã hóa).
-2. Bắt buộc **chia train/test** (`train_test_split`, `random_state=42`)
-   rồi mới `fit` — tránh data leakage.
-3. Dùng `Pipeline` + `ColumnTransformer` (điền khuyết, chuẩn hóa,
-   mã hóa thể loại) để mô hình dự đoán được trên web.
-4. Chọn `LinearRegression` **hoặc** `RandomForestRegressor`.
-5. Đánh giá MAE, RMSE, R² trên tập test; trả về `Pipeline` đã huấn luyện.
-
----
-
-### 👑 NHÓM TRƯỞNG — Tổng hợp lên `app.py`
-
-- Import hàm từ `src/` vào 4 phần của sidebar (đã cấu trúc sẵn).
-- Thiết kế nút bấm, ô nhập, bảng hiển thị, `st.pyplot(fig)`.
-- Lưu dữ liệu sạch vào `st.session_state` để 4 trang dùng chung.
-- Sau khi test thành công, các tổ **báo lại cho Nhóm trưởng** để
-  import vào `app.py` — thành viên không tự sửa file này.
-
----
-
-## 6. Checklist nghiệm thu cho từng tổ
-
-- [ ] Code chạy được trên máy cá nhân (hoặc Google Colab).
-- [ ] Tên hàm và tham số **không đổi** so với mục 4.
-- [ ] Không còn chữ `pass` trong hàm phụ trách.
-- [ ] Hàm trả về đúng kiểu dữ liệu đã quy ước.
-- [ ] `calculate_basic_stats` tạo được `data/results2.csv`.
-- [ ] Biểu đồ trả về `fig`, không gọi `plt.show()`.
-- [ ] Không sửa `app.py`, `requirements.txt` (trừ khi báo Nhóm trưởng).
-- [ ] Báo lại kết quả test cho Nhóm trưởng để tích hợp giao diện.
-
----
-
-## 7. Ghi chú kỹ thuật
-
-- **Khả năng tái lập:** mọi mô hình/PCA dùng `random_state=42`.
-- **Chuẩn hóa dữ liệu:** K-means và PCA **bắt buộc** dùng
-  `StandardScaler`; radar chart dùng `MinMaxScaler`.
-- **Đóng hình:** sau `st.pyplot(fig)` nên `plt.close(fig)` để tránh
-  rò rỉ bộ nhớ khi chạy lại app.
-- **Bộ nhớ session:** mô hình huấn luyện nặng nên lưu vào
-  `st.session_state`, đừng huấn luyện lại mỗi lần tương tác.
-- **Lỗi phiên bản sklearn:** `python -m pip install -r requirements.txt`.
-
----
-
-## 8. Cần thống nhất với Nhóm trưởng (chưa chốt)
-
-1. **Cột dữ liệu ngoài bảng chuẩn:** radar chart cần `Votes`,
-   `Duration_min` — đã thêm vào mục 3.1; Tổ 1 lưu ý khi thu thập thật.
-2. **Chữ ký `run_pca_reduction(df)`:** giữ nguyên `df`, hàm tự scale
-   bên trong (khác gợi ý nhận `X_scaled` — đã giải thích ở mục 5).
-3. **Phần IV:** chưa có hướng dẫn chi tiết từ Nhóm trưởng; mục 5 chỉ
-   là yêu cầu tối thiểu, chờ bổ sung.
+## 🔮 8. Định Hướng Phát Triển Mở Rộng
+
+- [ ] **Mở rộng dữ liệu:** Tích hợp API tự động đồng bộ thời gian thực từ The Movie Database (TMDb API).
+- [ ] **Phân tích Cảm xúc (Sentiment Analysis):** Khai phá các đánh giá bằng văn bản của khán giả từ IMDb để lượng hóa chỉ số yêu thích nội dung.
+- [ ] **Mô hình học máy nâng cao:** Bổ sung thuật toán Gradient Boosting (`XGBoost`, `LightGBM`) để gia tăng độ chính xác dự báo doanh thu.
+- [ ] **Đề xuất phim thông minh (Recommender System):** Đề xuất các bộ phim tương đồng dựa trên khoảng cách đặc trưng nội dung (Content-based filtering).

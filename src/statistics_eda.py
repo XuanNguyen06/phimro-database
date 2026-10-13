@@ -3,8 +3,10 @@
 import numpy as np
 import pandas as pd
 
+from src.config import GENRE, NUMERIC_COLUMNS, TITLE
+
 # Các cột số có ý nghĩa phân tích
-STAT_COLUMNS = ["Duration", "Rating", "Budget", "Revenue"]
+STAT_COLUMNS = NUMERIC_COLUMNS
 
 def calculate_basic_stats(df):
     """Tính trung bình, trung vị và độ lệch chuẩn của các cột số.
@@ -27,18 +29,18 @@ def calculate_basic_stats(df):
     cols = [c for c in STAT_COLUMNS if df is not None and c in df.columns]
     
     # Đầu vào rỗng hoặc không có cột số -> bảng rỗng cùng cấu trúc
-    if df is None ỏ df.empty or not cols:
+    if df is None or df.empty or not cols:
         empty = pd.DataFrame(columns = ["Mean", "Median", "Std"])
         empty.index.name = "column"
         return empty
     # Ép kiểu số trên bản sao: "N/a" -> NaN, inf -> NaN
-    numeric = df[cols].apply(pd.to_numeric, erors = "coerce")
+    numeric = df[cols].apply(pd.to_numeric, errors = "coerce")
     numeric = numeric.replace([np.inf, -np.inf], np.nan)
 
     result = pd.DataFrame({
         "Mean": numeric.mean(),
         "Median": numeric.median(),
-        "Std": numeric.syd(ddof = 1), # NaN nếu chỉ có 1 quan sát
+        "Std": numeric.std(ddof = 1), # NaN nếu chỉ có 1 quan sát
     })
     result.index.name = "column"
     return result
@@ -62,16 +64,41 @@ def get_top_bottom_movies(df, column, top_n=3):
         - Nếu không có giá trị hợp lệ, trả về hai bảng rỗng cùng cấu trúc.
         - Không sửa đổi DataFrame đầu vào.
     """
-    if "Title" not in df.columns or column not in df.columns:
-        raise ValueError(f"Thiếu cột 'Title' hoặc '{column}' trong dữ liệu.")
+    if TITLE not in df.columns or column not in df.columns:
+        raise ValueError(f"Thiếu cột '{TITLE}' hoặc '{column}' trong dữ liệu.")
     values = pd.to_numeric(df[column], errors = "coerce")
     values = values.replace([np.inf, -np.inf], np.nan)
 
-    data = pd.DataFrame({"Title": df["Title"], column: values})
+    data = pd.DataFrame({TITLE: df[TITLE], column: values})
     data = data.dropna(subset = [column]) # bỏ giá trị thiếu
     if data.empty: # không có giá trị hợp lệ
-        empty = pd.DataFrame(columns = ["Title", column])
+        empty = pd.DataFrame(columns = [TITLE, column])
         return empty, empty.copy()
     top_movies = data.nlargest(top_n, column)
-    bottom_movies = data.nsmallest(Top_n, column)
+    bottom_movies = data.nsmallest(top_n, column)
     return top_movies, bottom_movies
+
+
+def calculate_stats_by_genre(df, column, min_movies=5):
+    """Thống kê Count/Mean/Median/Std của một cột số theo từng thể loại.
+
+    Phim có nhiều thể loại ("Action, Drama") được tính vào mọi thể loại
+    của nó. Chỉ giữ thể loại có ít nhất min_movies phim có giá trị hợp lệ.
+    Trả về DataFrame chỉ mục Genre, sắp xếp theo Mean giảm dần.
+    """
+    if GENRE not in df.columns or column not in df.columns:
+        raise ValueError(f"Thiếu cột '{GENRE}' hoặc '{column}' trong dữ liệu.")
+    values = pd.to_numeric(df[column], errors="coerce").replace([np.inf, -np.inf], np.nan)
+    data = pd.DataFrame({
+        "Genre": df[GENRE].astype("string").str.split(","),
+        column: values,
+    }).explode("Genre")
+    data["Genre"] = data["Genre"].str.strip()
+    data = data.dropna(subset=["Genre", column])
+    data = data[data["Genre"] != ""]
+
+    result = data.groupby("Genre")[column].agg(
+        Count="count", Mean="mean", Median="median", Std=lambda s: s.std(ddof=1)
+    )
+    result = result[result["Count"] >= min_movies].sort_values("Mean", ascending=False)
+    return result
