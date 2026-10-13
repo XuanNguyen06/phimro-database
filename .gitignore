@@ -6,14 +6,22 @@ __pycache__/
 venv/
 env/
 
+# IDE
+.idea/
+.vscode/
+
 # Streamlit
 .streamlit/
 
-# Dữ liệu
+# Dữ liệu: KHÔNG commit file CSV (dataset TMDB ~46 MB nằm ở data/collected/)
 data/*.csv
-data/raw/
-data/processed/
+data/**/*.csv
+data/collected/
 !data/.gitkeep
+
+# File tạm phát sinh từ script (ghi ở thư mục gốc)
+/results*.csv
+/unmatched_movies.csv
 
 # OS
 .DS_Store

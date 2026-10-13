@@ -27,18 +27,18 @@ def calculate_basic_stats(df):
     cols = [c for c in STAT_COLUMNS if df is not None and c in df.columns]
     
     # Đầu vào rỗng hoặc không có cột số -> bảng rỗng cùng cấu trúc
-    if df is None ỏ df.empty or not cols:
+    if df is None or df.empty or not cols:
         empty = pd.DataFrame(columns = ["Mean", "Median", "Std"])
         empty.index.name = "column"
         return empty
     # Ép kiểu số trên bản sao: "N/a" -> NaN, inf -> NaN
-    numeric = df[cols].apply(pd.to_numeric, erors = "coerce")
+    numeric = df[cols].apply(pd.to_numeric, errors = "coerce")
     numeric = numeric.replace([np.inf, -np.inf], np.nan)
 
     result = pd.DataFrame({
         "Mean": numeric.mean(),
         "Median": numeric.median(),
-        "Std": numeric.syd(ddof = 1), # NaN nếu chỉ có 1 quan sát
+        "Std": numeric.std(ddof = 1), # NaN nếu chỉ có 1 quan sát
     })
     result.index.name = "column"
     return result
@@ -73,5 +73,5 @@ def get_top_bottom_movies(df, column, top_n=3):
         empty = pd.DataFrame(columns = ["Title", column])
         return empty, empty.copy()
     top_movies = data.nlargest(top_n, column)
-    bottom_movies = data.nsmallest(Top_n, column)
+    bottom_movies = data.nsmallest(top_n, column)
     return top_movies, bottom_movies
